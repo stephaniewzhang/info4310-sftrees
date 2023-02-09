@@ -1,0 +1,166 @@
+<html>
+<head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+    <style>
+        h1 {
+            margin-left: 350;
+        }
+        
+        svg{
+            margin-left:100;
+        }
+    </style>
+</head>
+<body>
+    <div>
+    <h1>The location and diameter of the most prominant 4 species of trees in San Francisco</h1>
+    <svg id = "SpeciesMap" height=1800 width=1800 style="border:1px solid black;"></svg>
+    <script>
+        const drawSpeciesMap = async () => {
+            // select svg and get all parameters
+            const smap = d3.select("#SpeciesMap");
+            const swidth = smap.attr("width");
+            const sheight = smap.attr("height");
+            
+            const smapWidth = swidth - 40;
+            const smapHeight = sheight - 40;
+            
+            const sf = await d3.json("SF-Neighborhoods.geo.json");
+            
+            const sfNeighborhood = topojson.feature(sf, sf.objects.SFNeighborhoods);
+            const sfNeighborhoodMesh = topojson.mesh(sf, sf.objects.SFNeighborhoods);
+            
+            var projection = d3.geoMercator().fitSize([smapWidth, smapHeight], sfNeighborhood);
+            var path = d3.geoPath().projection(projection);
+            
+            let viewport = smap.append("g");
+            
+            viewport.selectAll("neighborhood").data(sfNeighborhood.features)
+            .join("path")
+            .style("fill", "black")
+            .attr("class", "neighborhood")
+            .attr("d", path);
+            
+            viewport.append("path")
+            .datum(sfNeighborhoodMesh)
+            .attr("class", "zips_outline")
+            .style("stroke", "white")
+            .attr("fill-opacity", 0.0)
+            .style("stroke-width", 1)
+            .attr("d", path);
+            
+            smap.append("circle").attr("cx",100).attr("cy",130).attr("r", 10).style("fill", "blue")
+            smap.append("circle").attr("cx",100).attr("cy",160).attr("r", 10).style("fill", "orange")
+            smap.append("circle").attr("cx",100).attr("cy",190).attr("r", 10).style("fill", "green")
+            smap.append("circle").attr("cx",100).attr("cy",220).attr("r", 10).style("fill", "red")
+            
+            smap.append("text").attr("x", 90).attr("y", 100).text("Most Common 4 Species").style("font-size", "25px").attr("alignment-baseline","middle")
+            smap.append("text").attr("x", 120).attr("y", 130).text("Sycamore: London Plane").style("font-size", "20px").attr("alignment-baseline","middle")
+            smap.append("text").attr("x", 120).attr("y", 160).text("New Zealand Xmas Tree").style("font-size", "20px").attr("alignment-baseline","middle")
+            smap.append("text").attr("x", 120).attr("y", 190).text("Brisbane Box").style("font-size", "20px").attr("alignment-baseline","middle")
+            smap.append("text").attr("x", 120).attr("y", 220).text("Victorian Box").style("font-size", "20px").attr("alignment-baseline","middle")
+            
+            
+            d3.csv("swz8Processed.csv").then( (data) => {
+                console.log(data);
+                data.forEach((d,i) => {
+                    d['Longitude'] = Number(d['Longitude']);
+                    d['Latitude'] = Number(d['Latitude']);
+                }) 
+                const species = d3.scaleOrdinal().domain(["Sycamore: London Plane", "New Zealand Xmas Tree", "Brisbane Box", "Victorian Box"]).range(['blue','orange','green', 'red']);
+                
+                const diameterExtent = d3.extent(data, d => d['DBH']);
+                const radiusScale = d3.scaleLinear().domain(diameterExtent).range([0,40]);
+                
+                viewport.selectAll("circle")
+                .data(data)
+                .join("circle")
+                .attr("cx", d => projection([d['Longitude'],d['Latitude']])[0])
+                .attr("cy", d => projection([d['Longitude'],d['Latitude']])[1])
+                .style("fill", d => species(d['Common_Name']))
+                .style("opacity", 0.4)
+                .attr("r", d => radiusScale(d['DBH']));
+            })
+        }
+        drawSpeciesMap();
+    </script>
+    </div>
+    <h1>The average age of San Francisco Trees based off of the Owner of Tree</h1>
+    <svg id = "OwnerBar" height=1800 width=1800 style="border:1px solid black;"></svg>
+    <script>
+        const obar = d3.select("#SpeciesMap");
+        const owidth = obar.attr("width");
+        const oheight = obar.attr("height");
+
+        var margin = {top: 30, right: 30, bottom: 200, left: 100},
+        width = owidth - margin.left - margin.right,
+        height = oheight - margin.top - margin.bottom;
+        
+        var viewport = d3.select("#OwnerBar")
+        .append("svg")
+        .attr("width", owidth)
+        .attr("height", oheight)
+        .append("g")
+        .attr("transform",
+        "translate(" + margin.left + "," + margin.top + ")");
+        
+        d3.csv("swz8Processed2.csv").then( (data) => {
+            console.log("data",data)
+            data.forEach((d,i) => {
+                d['age'] = Number(d['age']);
+            }) 
+            
+            var x = d3.scaleBand()
+            .range([ 0, width ])
+            .domain(data.map(function(d) { return d.qLegalStatus; }))
+            .padding(0.2);
+
+            viewport.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x))
+            .selectAll("text")
+            .style("font-size","15px")
+            .attr("transform", "translate(-10,0)rotate(-45)")
+            .style("text-anchor", "end");
+            
+            const ageExtent = [0,40]
+            var y = d3.scaleLinear()
+            .domain(ageExtent)
+            .range([ height, 0]);
+
+            viewport.append("g")
+            .call(d3.axisLeft(y))
+            .selectAll("text")
+            .style("font-size","20px");
+
+            const yScale = d3.scaleLinear()
+                .domain(ageExtent)
+                .range([height,0]);
+            
+            viewport.selectAll("bar")
+            .data(data)
+            .enter()
+            .append("rect")
+            .attr("x", function(d) { return x(d.qLegalStatus); })
+            .attr("y", function(d) { return y(d.age); })
+            .attr("width", x.bandwidth())
+            .attr("height", function(d) { return height - y(d.age); })
+            .attr("fill", "purple")
+
+            viewport.append("text")
+                    .attr("x", width/2)
+                    .attr("y", height + 150)
+                    .style("font-size","30px")
+                    .text("Agency or person that is primary caregiver to tree -- Owner of Tree")
+            
+
+            viewport.append("text")
+                    .attr("x", -800)
+                    .attr("y", -30)
+                    .attr("transform", "translate(-40,0)rotate(-90)")
+                    .style("font-size","30px")
+                    .text("Age in Years")
+        })
+    </script>
+</body></html>
